@@ -263,19 +263,27 @@ abstract class ScalarFunctionsValidateSuite extends FunctionsValidateTest {
     }
   }
 
-  test("Test get_json_object datatab function") {
+  test("get_json_object") {
     runQueryAndCompare(
       "SELECT get_json_object(string_field1, '$.a') " +
         "from datatab limit 1;") {
       checkGlutenOperatorMatch[ProjectExecTransformer]
     }
-  }
 
-  test("Test get_json_object lineitem function") {
     runQueryAndCompare(
       "SELECT l_orderkey, get_json_object('{\"a\":\"b\"}', '$.a') " +
         "from lineitem limit 1;") {
       checkGlutenOperatorMatch[ProjectExecTransformer]
+    }
+
+    // Invalid UTF-8 encoding.
+    spark.sql(
+      "CREATE TABLE t USING parquet SELECT concat('{\"a\": 2, \"'," +
+        " string(X'80'), '\": 3, \"c\": 100}') AS c1")
+    withTable("t") {
+      runQueryAndCompare("SELECT get_json_object(c1, '$.c') FROM t;") {
+        checkGlutenOperatorMatch[ProjectExecTransformer]
+      }
     }
   }
 
@@ -754,6 +762,12 @@ abstract class ScalarFunctionsValidateSuite extends FunctionsValidateTest {
     }
   }
 
+  test("Test sum/count function") {
+    runQueryAndCompare("""SELECT sum(2),count(2) from lineitem""".stripMargin) {
+      checkGlutenOperatorMatch[BatchScanExecTransformer]
+    }
+  }
+
   test("Test spark_partition_id function") {
     runQueryAndCompare("""SELECT spark_partition_id(), l_orderkey
                          | from lineitem limit 100""".stripMargin) {
@@ -914,6 +928,24 @@ abstract class ScalarFunctionsValidateSuite extends FunctionsValidateTest {
     }
     runQueryAndCompare(
       "SELECT regexp_replace(c_comment, '\\w', 'something', 3) FROM customer limit 50") {
+      checkGlutenOperatorMatch[ProjectExecTransformer]
+    }
+  }
+
+  testWithSpecifiedSparkVersion("mask", Some("3.4")) {
+    runQueryAndCompare("SELECT mask(c_comment) FROM customer limit 50") {
+      checkGlutenOperatorMatch[ProjectExecTransformer]
+    }
+    runQueryAndCompare("SELECT mask(c_comment, 'Y') FROM customer limit 50") {
+      checkGlutenOperatorMatch[ProjectExecTransformer]
+    }
+    runQueryAndCompare("SELECT mask(c_comment, 'Y', 'y') FROM customer limit 50") {
+      checkGlutenOperatorMatch[ProjectExecTransformer]
+    }
+    runQueryAndCompare("SELECT mask(c_comment, 'Y', 'y', 'o') FROM customer limit 50") {
+      checkGlutenOperatorMatch[ProjectExecTransformer]
+    }
+    runQueryAndCompare("SELECT mask(c_comment, 'Y', 'y', 'o', '*') FROM customer limit 50") {
       checkGlutenOperatorMatch[ProjectExecTransformer]
     }
   }

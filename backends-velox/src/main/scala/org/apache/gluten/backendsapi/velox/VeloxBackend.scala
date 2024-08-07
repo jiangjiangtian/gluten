@@ -66,6 +66,7 @@ object VeloxBackendSettings extends BackendSettingsApi {
   val GLUTEN_VELOX_UDF_LIB_PATHS = getBackendConfigPrefix() + ".udfLibraryPaths"
   val GLUTEN_VELOX_DRIVER_UDF_LIB_PATHS = getBackendConfigPrefix() + ".driver.udfLibraryPaths"
   val GLUTEN_VELOX_INTERNAL_UDF_LIB_PATHS = getBackendConfigPrefix() + ".internal.udfLibraryPaths"
+  val GLUTEN_VELOX_UDF_ALLOW_TYPE_CONVERSION = getBackendConfigPrefix() + ".udfAllowTypeConversion"
 
   val MAXIMUM_BATCH_SIZE: Int = 32768
 
@@ -224,7 +225,6 @@ object VeloxBackendSettings extends BackendSettingsApi {
       val unsupportedTypes = fields.flatMap {
         field =>
           field.dataType match {
-            case _: TimestampType => Some("TimestampType")
             case _: StructType => Some("StructType")
             case _: ArrayType => Some("ArrayType")
             case _: MapType => Some("MapType")
@@ -293,7 +293,7 @@ object VeloxBackendSettings extends BackendSettingsApi {
     fields.map {
       field =>
         field.dataType match {
-          case _: TimestampType | _: StructType | _: ArrayType | _: MapType => return false
+          case _: StructType | _: ArrayType | _: MapType => return false
           case _ =>
         }
     }
@@ -439,13 +439,13 @@ object VeloxBackendSettings extends BackendSettingsApi {
 
     plan match {
       case exec: HashAggregateExec if exec.aggregateExpressions.nonEmpty =>
-        // Check Sum(1) or Count(1).
+        // Check Sum(Literal) or Count(Literal).
         exec.aggregateExpressions.forall(
           expression => {
             val aggFunction = expression.aggregateFunction
             aggFunction match {
-              case _: Sum | _: Count =>
-                aggFunction.children.size == 1 && aggFunction.children.head.equals(Literal(1))
+              case Sum(Literal(_, _), _) => true
+              case Count(Seq(Literal(_, _))) => true
               case _ => false
             }
           })
